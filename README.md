@@ -1,98 +1,136 @@
-# AI 代理退貨管理系統
-
-嗨，這是我為了解決一個 AI Agent 程式設計挑戰所建立的專案。我的目標是打造一個乾淨、實用且穩健的網頁應用程式，用來模擬一個簡單的企業退貨管理流程，並從中展示 AI 代理設計與數據管理的核心概念。
-
----
-
-## 🚀 線上展示 (Live Demo)
+🤖 退貨與保固洞察 AI 代理系統
+🚀 線上展示 (Live Demo)
 
 我已經將這個專案部署上線，您可以透過以下連結直接與它互動：
 
-[**點此前往線上展示**](https://python-agent-app-chuan-jen.streamlit.app/)
+點此前往線上展示
 
-## ✨ 設計理念與核心功能
+✨ 設計理念與核心功能
 
 在這個專案中，我設計了一個由兩個核心代理組成的系統，它們各自負責不同的任務，並透過一個簡單的介面進行協調。
 
-### 1. 檢索代理 (Retrieval Agent) - 資料庫的心臟
+1. 檢索代理 (Retrieval Agent) - 資料庫的心臟
 
-最初的題目提示是使用自然語言來新增資料，但我認為一個**結構化的表單**能帶來更好的使用者體驗，並且更重要的是，能從源頭確保資料品質，避免使用者輸入模稜兩可或不完整的內容。
+最初的題目提示是使用自然語言來新增資料，但我認為一個結構化的表單能帶來更好的使用者體驗，並且更重要的是，能從源頭確保資料品質，避免使用者輸入模稜兩可或不完整的內容。
 
 我為這個代理實現了幾個關鍵功能：
 
-* **自動化主鍵**：我認為 `Order ID` 作為主鍵，不應該由使用者手動填寫。因此，我設計了一個機制，讓系統**自動抓取資料庫中最新的訂單編號並加一**，以此作為新紀錄的 ID。這徹底杜絕了主鍵重複或無效的風險，是維護資料庫完整性的關鍵一步。
+自動化主鍵：
+Order ID 由系統自動生成，會抓取資料庫中最新的訂單編號並加一，完全避免主鍵重複或無效的風險。
 
-* **雲端資料來源**：為了方便更新初始資料集，我選擇讓應用程式直接從一個**公開的 Google Sheet** 讀取資料，而不是依賴一個固定的本地 CSV 檔。這樣一來，只要更新 Google Sheet 上的內容，應用程式重啟後就能抓到最新的資料，無需重新部署。
+雲端資料來源：
+應用程式啟動時，會自動從 Google Sheet 讀取資料，而不是依賴固定的本地 CSV 檔。只要更新 Google Sheet，應用程式重啟後就能抓到最新資料，無需重新部署。
 
-* **前端驗證**：在資料被送出前，我加入了多項驗證規則，確保如產品名稱、店家名稱等欄位都符合基本的格式要求。
+前端驗證：
+在送出前，系統會檢查輸入的基本格式，例如：產品名稱至少 2 個字元、店家名稱至少 2 個字元、成本必須大於 0。
 
-### 2. 報告代理 (Report Agent) - 商業洞察的窗口
+🔧 新增的程式邏輯 (程式碼更新部分)
+
+在最新的版本中，我對 檢索代理 (Retrieval Agent) 進行了幾個重要的優化與擴充：
+
+雙重輸入模式
+
+除了表單輸入外，新增了 自然語言輸入 (NLP) 模式。
+
+使用者可以用一句話輸入退貨需求，系統會呼叫 Google Gemini API 自動解析成結構化資料，並寫入資料庫。
+
+NLP 資料落地策略
+
+缺漏欄位會自動補上預設值（數字 → 0.0，文字 → "Unknown"）。
+
+NLP 新增的紀錄預設為 未批准 (approved_flag = No)，確保業務流程一致性。
+
+非同步請求 (async/await)
+
+使用 httpx.AsyncClient 搭配 async/await 呼叫 LLM API，避免阻塞 UI。
+
+即時回饋機制
+
+在 NLP 模式下，會先顯示 spinner「AI 正在解析中…」，完成後直接展示 AI 產生的 JSON 結果，讓使用者確認。
+
+2. 報告代理 (Report Agent) - 商業洞察的窗口
 
 這個代理的目標是提供快速的數據洞察。它會生成一份包含兩個工作表的 Excel 報告：
 
-* **`Summary` (摘要)**：提供高層次的關鍵指標 (KPIs)，例如總退貨成本、已批准的退貨比例等，讓管理者能快速掌握整體狀況。
+Summary (摘要)：提供高層次的關鍵指標 (KPIs)，例如總退貨成本、已批准的退貨比例等，讓管理者能快速掌握整體狀況。
 
-* **`Findings` (詳細資料)**：包含資料庫中完整的原始數據，供需要深入分析的使用者使用。
+Findings (詳細資料)：包含資料庫中完整的原始數據，供需要深入分析的使用者使用。
 
 我認為這種雙層式的報告設計，能同時滿足快速瀏覽和深度挖掘兩種不同的需求。
 
----
+🏗️ 系統架構圖
+flowchart TD
+    subgraph User["使用者"]
+        A1["表單輸入"] --> C
+        A2["自然語言輸入 (NLP)"] --> C
+        A3["下載報告"] --> E
+    end
 
-## 🛠️ 我選擇的技術棧 (Tech Stack)
+    subgraph Coordinator["協調器 (Streamlit 前端)"]
+        C["分派請求"]
+    end
 
-為了快速且有效地完成這個專案，我選擇了以下技術組合：
+    subgraph RetrievalAgent["檢索代理 (Retrieval Agent)"]
+        C --> B1["驗證 / NLP 解析"]
+        B1 --> B2["SQLite 資料庫"]
+        B2 --> B3["更新紀錄 / 回傳清單"]
+    end
 
-* **`Streamlit`**：作為前端框架。我選擇它主要是因為它能讓我用最純粹的 Python，在極短的時間內打造出一個功能完整的互動式介面，讓我能更專注在後端的代理邏輯上。
+    subgraph ReportAgent["報告代理 (Report Agent)"]
+        C --> D1["取得資料"]
+        D1 --> D2["生成 Excel 報告"]
+        D2 --> E["回傳下載連結"]
+    end
 
-* **`Pandas`**：數據處理的首選。無論是從 Google Sheet 讀取資料，還是進行後續的彙總計算與 Excel 生成，它都扮演了核心角色。
+🛠️ 我選擇的技術棧 (Tech Stack)
 
-* **`SQLite`**：一個輕量、免安裝的檔案型資料庫。對於這個規模的專案來說，它非常完美，因為它內建於 Python 中，無需任何額外的設定。
+Streamlit：快速開發互動式前端。
 
----
+Pandas：核心數據處理工具。
 
-## 📄 資料治理的思考
+SQLite：輕量級檔案型資料庫，免安裝、內建於 Python。
 
-我另外撰寫了一份關於**資料治理與資料血緣**的文件。裡面詳細說明了我為確保資料品質所設計的驗證規則、安全性考量，以及數據從最初的 Google Sheet 到最終 Excel 報告的完整生命週期。
+📄 資料治理的思考
 
-您可以在這個儲存庫中找到它：[**`DATA_GOVERNANCE.md`**](./DATA_GOVERNANCE.md)
+我另外撰寫了一份關於 資料治理與資料血緣 的文件，內容包含：
 
----
+資料驗證規則
 
-## ⚙️ 在本地端執行
+安全性考量
 
-如果您想在自己的電腦上執行這個專案，可以依照以下步驟：
+整個數據生命週期：從 Google Sheet → SQLite → Excel 報告
 
-1.  **複製儲存庫**：
-    ```bash
-    git clone [https://github.com/Chuan-JenChen/python-agent-app.git](https://github.com/Chuan-JenChen/python-agent-app.git)
-    cd python-agent-app
-    ```
+👉 文件位置：DATA_GOVERNANCE.md
 
-2.  **安裝依賴套件**：
-    ```bash
-    pip install -r requirements.txt
-    ```
+⚙️ 在本地端執行
 
-3.  **執行應用程式**：
-    ```bash
-    streamlit run app.py
-    ```
+複製儲存庫
 
-#### 步驟二：將這個有內容的檔案上傳到 GitHub
+git clone https://github.com/Chuan-JenChen/python-agent-app.git
+cd python-agent-app
 
-現在，打開您的終端機，依序執行以下三個指令：
 
-1.  **將所有變更加入追蹤**：
-    ```bash
-    git add .
-    ```
+安裝依賴套件
 
-2.  **建立一個存檔點**：
-    ```bash
-    git commit -m "Docs: Populate README.md with final content"
-    ```
+pip install -r requirements.txt
 
-3.  **推送到 GitHub**：
-    ```bash
-    git push
-    ```
+
+執行應用程式
+
+streamlit run app.py
+
+📤 推送到 GitHub
+
+加入變更
+
+git add .
+
+
+建立 commit
+
+git commit -m "Docs: Update README.md with NLP logic and system diagram"
+
+
+推送到 GitHub
+
+git push
