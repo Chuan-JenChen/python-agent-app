@@ -1,0 +1,11 @@
+# 忽略 Streamlit 的秘密資料夾，保護 API 金鑰
+.streamlit/
+
+# 忽略會一直變動的資料庫檔案
+*.db
+
+# 忽略自動產生的 Excel 報告
+*.xlsx
+
+# 忽略 Python 的快取資料夾
+__pycache__/
