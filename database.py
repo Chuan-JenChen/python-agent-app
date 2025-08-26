@@ -12,9 +12,7 @@ def init_db():
     # 連接到 SQLite 資料庫。如果檔案不存在，SQLite 會自動建立它。
     # `check_same_thread=False` 是一個重要的參數，它允許 Streamlit 這種多線程的網頁應用安全地存取同一個資料庫連線。
     conn = sqlite3.connect(DB_NAME, check_same_thread=False)
-    # 建立一個 'cursor' 物件，它就像是我們在資料庫中移動和操作的游標
     cursor = conn.cursor()
-    # 執行 SQL 指令來建立表格，定義了所有欄位的名稱和資料型態
     # 加上 UNIQUE 關鍵字，讓資料庫層級來確保 order_id 不會重複，這是保護資料完整性的重要一步
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS returns (

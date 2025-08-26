@@ -5,11 +5,13 @@ import database as db
 class RetrievalAgent:
     """
     檢索代理 (員工 A)：負責處理資料的存取。
-    它的主要工作是接收來自網頁表單的資料，並呼叫資料庫函數將其寫入資料庫。
+    在這個版本中，它的主要工作是接收來自網頁表單的資料，並將其寫入資料庫。
     """
     def add_return_from_form(self, form_data: dict):
         """
         從一個包含表單資料的字典 (dictionary) 中，新增一筆退貨紀錄。
+        :param form_data: 一個字典，鍵 (key) 是欄位名稱，值 (value) 是使用者輸入的內容。
+        :return: 一個包含 (DataFrame, message) 的元組 (tuple)。
         """
         try:
             # 呼叫 database.py 中的 add_return 函數，將表單資料傳遞過去
@@ -38,21 +40,33 @@ class ReportAgent:
         """
         try:
             all_returns = db.get_all_returns()
+            # 如果資料庫是空的，就不產生報告，直接回傳失敗訊息
             if all_returns.empty:
                 return False, "資料庫中沒有任何紀錄可供報告。"
 
+            # 使用 `with` 陳述式來建立 ExcelWriter，可以確保檔案操作完成後會被妥善關閉
             with pd.ExcelWriter('returns_summary.xlsx', engine='openpyxl') as writer:
                 # --- 準備摘要工作表的數據 ---
-                total_cost = all_returns['cost'].sum()
-                approved_returns = all_returns[all_returns['approved_flag'] == 'Yes']
+                total_cost = all_returns['cost'].sum() # 計算總成本
+                approved_returns = all_returns[all_returns['approved_flag'] == 'Yes'] # 篩選出已批准的退貨
                 
+                # 建立一個新的 DataFrame 來存放摘要資訊
                 summary_df = pd.DataFrame({
                     '項目': ['總退貨筆數', '獨立店家數量', '已批准退貨數', '總退貨成本'],
-                    '數值': [len(all_returns), all_returns['store_name'].nunique(), len(approved_returns), f"${total_cost:,.2f}"]
+                    '數值': [
+                        len(all_returns), 
+                        all_returns['store_name'].nunique(), # nunique() 用於計算不重複的項目數量
+                        len(approved_returns), 
+                        f"${total_cost:,.2f}" # 將成本格式化成美金格式，例如 $1,234.56
+                    ]
                 })
+                # 將摘要 DataFrame 寫入名為 'Summary' 的工作表
                 summary_df.to_excel(writer, sheet_name='Summary', index=False)
+                
+                # 將完整的原始數據寫入名為 'Findings' 的工作表
                 all_returns.to_excel(writer, sheet_name='Findings', index=False)
             
+            # 如果成功，回傳 True 和成功訊息
             return True, "報告 'returns_summary.xlsx' 已成功產生！"
         except Exception as e:
             return False, f"報告產生失敗：{e}"
@@ -61,7 +75,7 @@ class ReportAgent:
 # 設定網頁的標題和佈局 (layout='wide' 表示使用寬版模式)
 st.set_page_config(page_title="退貨洞察系統", layout="wide")
 # 顯示網頁的主標題
-st.title("� 退貨與保固洞察 AI 代理系統")
+st.title("🤖 退貨與保固洞察 AI 代理系統")
 
 # `st.session_state` 是一個類似字典的物件，可以在使用者多次互動之間保存狀態。
 # 我們用它來確保資料庫初始化和資料載入的動作，只在網頁第一次載入時執行一次。
@@ -71,14 +85,15 @@ if 'initialized' not in st.session_state:
     st.session_state.initialized = True  # 標記為已初始化
     st.toast("資料庫已準備就緒！") # 顯示一個短暫的彈出式通知
 
-# 建立兩個代理的實例 (物件)
 retrieval_agent = RetrievalAgent()
 report_agent = ReportAgent()
 
 # --- 介面佈局：新增退貨區塊 ---
 st.header("1. 新增退貨紀錄 (由 Retrieval Agent 處理)")
 
-# `st.form` 可以將多個輸入元件群組在一起，提升使用者體驗
+# `st.form` 可以將多個輸入元件群組在一起。
+# 只有當使用者點擊表單內的「送出」按鈕時，所有輸入的資料才會一次性地被送出。
+# 這可以避免使用者每填一個欄位，頁面就刷新一次，提供更好的使用者體驗。
 with st.form(key='add_return_form'):
     st.subheader("請填寫退貨詳細資訊")
     
@@ -90,22 +105,50 @@ with st.form(key='add_return_form'):
     # `st.columns(2)` 將介面切分為左右兩欄，讓版面更緊湊、更美觀。
     col1, col2 = st.columns(2)
     
+    # --- 左半邊的表單欄位 ---
     with col1:
-        # 使用 value 參數來為輸入框預先填入範例文字，引導使用者
-        product = st.text_input("產品名稱 (Product)", value="無線充電板", help="請輸入完整的產品名稱")
-        category = st.selectbox("產品類別 (Category)", 
-                                options=['Electronics', 'Accessories', 'Unknown'], 
-                                index=1, # index=1 表示預設選中 'Accessories'
-                                help="請從下拉選單中選擇產品類別")
-        cost = st.number_input("成本 (Cost)", min_value=0.01, value=25.50, format="%.2f", help="退貨成本必須大於 0")
+        # `st.text_input` 建立一個文字輸入框
+        product = st.text_input(
+            "產品名稱 (Product)", 
+            # `placeholder` 參數設定輸入框中的灰色提示文字
+            placeholder="例如：無線充電板", 
+            # `help` 參數設定當滑鼠停在元件上時，顯示的詳細說明
+            help="請輸入完整的產品名稱"
+        )
+        # `st.selectbox` 建立一個下拉選單
+        category = st.selectbox(
+            "產品類別 (Category)", 
+            options=['Electronics', 'Accessories', 'Unknown'], 
+            index=1, # `index=1` 表示預設選中第二個選項 'Accessories'
+            help="請從下拉選單中選擇產品類別"
+        )
+        # `st.number_input` 建立一個專門用來輸入數字的欄位
+        cost = st.number_input(
+            "成本 (Cost)", 
+            min_value=0.0, # 設定允許的最小值
+            value=0.0,     # 設定初始預設值
+            format="%.2f", # 設定數字顯示的格式 (小數點後兩位)
+            help="退貨成本必須大於 0"
+        )
 
+    # --- 右半邊的表單欄位 ---
     with col2:
-        store_name = st.text_input("店家名稱 (Store Name)", value="台北信義店", help="請輸入退貨的店家或平台名稱")
-        return_reason = st.text_input("退貨原因 (Return Reason)", value="商品有刮痕", help="請簡要說明退貨原因")
-        approved_flag = st.selectbox("是否批准 (Approved)", 
-                                     options=['Yes', 'No'], 
-                                     index=1, # index=1 表示預設選中 'No'
-                                     help="請選擇這筆退貨是否已被批准")
+        store_name = st.text_input(
+            "店家名稱 (Store Name)", 
+            placeholder="例如：台北信義店", 
+            help="請輸入退貨的店家或平台名稱"
+        )
+        return_reason = st.text_input(
+            "退貨原因 (Return Reason)", 
+            placeholder="例如：商品有刮痕", 
+            help="請簡要說明退貨原因"
+        )
+        approved_flag = st.selectbox(
+            "是否批准 (Approved)", 
+            options=['Yes', 'No'], 
+            index=1, 
+            help="請選擇這筆退貨是否已被批准"
+        )
     
     # `st.form_submit_button` 是表單專用的送出按鈕
     submit_button = st.form_submit_button(label='✨ 執行新增')
@@ -113,34 +156,60 @@ with st.form(key='add_return_form'):
 # 這段程式碼只有在使用者點擊了 `submit_button` 之後才會被執行
 if submit_button:
     # --- 資料驗證 (Validation) ---
+    # 建立一個空的列表，用來收集所有驗證失敗的錯誤訊息
     error_messages = []
-    if len(product.strip()) < 2: error_messages.append("產品名稱至少需要 2 個字元。")
-    if len(store_name.strip()) < 2: error_messages.append("店家名稱至少需要 2 個字元。")
-    if len(return_reason.strip()) == 0: error_messages.append("請填寫退貨原因。")
-    if cost <= 0.0: error_messages.append("成本必須大於 0。")
+
+    # 驗證規則 1：產品名稱長度
+    # `.strip()` 會移除字串前後的空白，避免使用者只輸入空格
+    if len(product.strip()) < 2:
+        error_messages.append("產品名稱至少需要 2 個字元。")
+    
+    # 驗證規則 2：店家名稱長度
+    if len(store_name.strip()) < 2:
+        error_messages.append("店家名稱至少需要 2 個字元。")
+        
+    # 驗證規則 3：退貨原因不可為空
+    if len(return_reason.strip()) == 0:
+        error_messages.append("請填寫退貨原因。")
+        
+    # 驗證規則 4：成本必須大於 0
+    if cost <= 0.0:
+        error_messages.append("成本必須大於 0。")
 
     # --- 根據驗證結果執行不同操作 ---
+    # 如果 `error_messages` 列表是空的，代表所有驗證都通過
     if not error_messages:
-        # 如果驗證通過，將表單資料打包成字典
+        # 將所有表單欄位的值，打包成一個字典，方便傳遞
         form_data = {
-            'product': product, 'category': category, 'return_reason': return_reason,
-            'cost': cost, 'approved_flag': approved_flag, 'store_name': store_name
+            'product': product,
+            'category': category,
+            'return_reason': return_reason,
+            'cost': cost,
+            'approved_flag': approved_flag,
+            'store_name': store_name
         }
-        # 呼叫代理來執行新增
+        # 這就是「協調器」的邏輯：將打包好的資料交給 retrieval_agent 處理
         df, message = retrieval_agent.add_return_from_form(form_data)
-        if df is not None: st.success(message)
-        else: st.error(message)
+        # 根據代理回傳的結果，顯示成功或失敗的訊息
+        if df is not None:
+            st.success(message)
+        else:
+            st.error(message)
     else:
-        # 如果驗證失敗，將所有錯誤訊息一次性顯示出來
+        # 如果有任何錯誤，就將所有錯誤訊息用 `st.error` 一次性顯示出來
+        # `\n\n- ` 和 `"\n- ".join()` 是用來美化輸出的格式
         st.error("資料驗證失敗，請修正以下問題：\n\n- " + "\n- ".join(error_messages))
 
 # --- 介面佈局：產生報告區塊 ---
 st.header("2. 產生報告 (由 Report Agent 處理)")
+# `st.button` 是一個普通的按鈕，點擊後會立即觸發一次頁面刷新
 if st.button("產生 Excel 報告"):
+    # 協調器邏輯：將任務交給 report_agent 處理
     success, message = report_agent.generate_report()
     if success:
         st.success(message)
-        with open("returns_summary.xlsx", "rb") as file:
+        # 如果報告成功產生，就提供一個下載按鈕
+        with open("returns_summary.xlsx", "rb") as file: # "rb" 表示以二進位模式讀取檔案
             st.download_button("📥 點此下載報告", file, "returns_summary.xlsx")
     else:
         st.error(message)
