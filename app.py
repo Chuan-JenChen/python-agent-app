@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
-import database as db  # 你自己的資料庫模組：提供 init_db/ingest_from_google_sheet/get_all_returns/add_return/get_next_order_id
+import database as db  
 import json
 import asyncio
-import httpx  # 用於非同步 HTTP 呼叫（打 Google Gemini API）
+import httpx  
 
 # --- 代理定義 (Agent Definitions) ---
 
